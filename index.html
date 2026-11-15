@@ -56,6 +56,16 @@
   .banner{background:#3a2a12;border:1px solid #6b4a14;color:var(--acc2);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:12px}
   .foot{color:var(--mute);font-size:12px;margin-top:26px;text-align:center}
   .foot button{background:none;color:var(--acc2);text-decoration:underline;padding:6px}
+  .cam{width:40px;height:44px;border-radius:12px;background:var(--card2);font-size:18px}
+  .it{padding:10px 6px;border-bottom:1px solid var(--line)}
+  .it:last-child{border-bottom:0}
+  .it .hd{display:flex;gap:8px;align-items:baseline}
+  .it .hd span{color:var(--mute);font-size:14px}
+  .it time{margin-left:auto;color:var(--mute);font-size:13px;white-space:nowrap}
+  .it img{display:block;width:100%;max-height:340px;object-fit:cover;border-radius:12px;margin-top:8px;background:var(--card2);cursor:zoom-in}
+  .it .del{background:none;color:var(--mute);font-size:13px;text-decoration:underline;padding:8px 0 0}
+  #lb{position:fixed;inset:0;background:rgba(0,0,0,.93);display:flex;align-items:center;justify-content:center;z-index:9;padding:10px}
+  #lb img{max-width:100%;max-height:100%;border-radius:8px}
   [hidden]{display:none!important}
 </style>
 </head>
@@ -112,6 +122,11 @@
     <div id="tabs" class="tabs"></div>
     <div id="board" class="card"><div class="note">Lade Daten …</div></div>
 
+    <h2>Letzte Runden</h2>
+    <div id="feed" class="card"><div class="note">Lade Daten …</div></div>
+    <input id="file" type="file" accept="image/*" hidden>
+    <div id="lb" hidden><img alt="Foto in groß"></div>
+
     <div class="foot">
       <button id="shareBtn" type="button">Link für Freunde kopieren</button><br>
       <button id="outBtn" type="button" hidden></button><br>
@@ -130,8 +145,8 @@ const DRINKS=[
 ];
 const PERIODS=[['day','Heute'],['week','Woche'],['month','Monat'],['all','Gesamt']];
 const $=id=>document.getElementById(id);
-const S={players:[],rows:[],me:null,pick:null,logout:false,period:'day',loaded:false};
-let sb=null,inflight=0,reloadT=null;
+const S={players:[],rows:[],feed:[],photoOK:false,me:null,pick:null,logout:false,period:'day',loaded:false};
+let sb=null,inflight=0,reloadT=null,pendingK=null,feedSig='';
 
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
 function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
@@ -155,7 +170,37 @@ function localBump(pid,k,delta){
   r.n=Math.max(0,r.n+delta);
 }
 
+function when(ts){
+  const d=new Date(ts);const t=d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+  return d.toDateString()===new Date().toDateString()?t:d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})+' '+t;
+}
+function purl(path){return /^[\w\-\/.]+$/.test(path)?sb.storage.from('fotos').getPublicUrl(path).data.publicUrl:''}
+function renderFeed(){
+  if(!S.loaded)return;
+  const names={};S.players.forEach(p=>names[p.id]=p.name);const dm={};DRINKS.forEach(d=>dm[d.k]=d);
+  const items=S.feed.filter(e=>names[e.player_id]&&dm[e.drink]);
+  const sig=JSON.stringify([S.me,items.map(e=>[e.id,e.photo||'',names[e.player_id]])]);
+  if(sig===feedSig)return;feedSig=sig;
+  const feed=$('feed');feed.textContent='';
+  if(!items.length){feed.appendChild(el('div','note','Noch keine Einträge.'));return}
+  items.forEach(e=>{
+    const it=el('div','it'),hd=el('div','hd');
+    hd.appendChild(el('b',null,dm[e.drink].e+' '+names[e.player_id]));
+    hd.appendChild(el('span',null,dm[e.drink].n));
+    hd.appendChild(el('time',null,when(e.created_at)));
+    it.appendChild(hd);
+    const u=e.photo?purl(e.photo):'';
+    if(u){
+      const img=document.createElement('img');img.loading='lazy';img.alt='Foto von '+names[e.player_id];img.src=u;
+      img.onclick=()=>{$('lb').firstElementChild.src=u;$('lb').hidden=false};
+      it.appendChild(img);
+      if(e.player_id===S.me){const d=el('button','del','Foto löschen');d.onclick=()=>delPhoto(e);it.appendChild(d)}
+    }
+    feed.appendChild(it);
+  });
+}
 function render(){
+  renderFeed();
   if(S.loaded&&S.me&&!S.players.some(p=>p.id===S.me)){S.me=null;ls('runde.me','')}
   const me=S.players.find(p=>p.id===S.me);
   // Dieses Gerät gehört fest zu einer Person – Auswahl nur beim ersten Mal
@@ -184,7 +229,9 @@ function render(){
       const ctl=el('div','ctl');
       const minus=el('button','pm','−');minus.setAttribute('aria-label',d.n+' abziehen');minus.onclick=()=>bump(me.id,d.k,-1);
       const plus=el('button','pm plus','+1');plus.setAttribute('aria-label',d.n+' eintragen');plus.onclick=()=>bump(me.id,d.k,1);
-      ctl.appendChild(minus);ctl.appendChild(el('div','cnt',String(myCount(me.id,d.k))));ctl.appendChild(plus);
+      ctl.appendChild(minus);ctl.appendChild(el('div','cnt',String(myCount(me.id,d.k))));
+      if(S.photoOK){const cam=el('button','cam','📷');cam.setAttribute('aria-label',d.n+' mit Foto eintragen');cam.onclick=()=>{pendingK=d.k;$('file').click()};ctl.appendChild(cam)}
+      ctl.appendChild(plus);
       card.appendChild(ctl);box.appendChild(card);
     });
   }
@@ -225,14 +272,18 @@ async function fetchAll(){
     if(r.error)throw r.error;
     rows=rows.concat(r.data);if(r.data.length<1000)break;from+=1000;
   }
-  return {players:pl.data,rows};
+  // Letzte Einträge; ohne Foto-Spalte (SQL-Erweiterung noch nicht ausgeführt) läuft die App ohne Fotos weiter
+  let photoOK=true;
+  let f=await sb.from('entries').select('id,player_id,drink,created_at,photo').order('created_at',{ascending:false}).limit(30);
+  if(f.error){photoOK=false;f=await sb.from('entries').select('id,player_id,drink,created_at').order('created_at',{ascending:false}).limit(30);if(f.error)throw f.error}
+  return {players:pl.data,rows,feed:f.data,photoOK};
 }
 async function load(){
   if(!sb||inflight>0)return;
   try{
     const d=await fetchAll();
     if(inflight>0)return; // eigene Eingabe läuft noch – gleich nochmal
-    S.players=d.players;S.rows=d.rows;S.loaded=true;
+    S.players=d.players;S.rows=d.rows;S.feed=d.feed;S.photoOK=d.photoOK;S.loaded=true;
     if($('banner').dataset.kind==='net'){banner('');$('banner').dataset.kind=''}
     render();
   }catch(e){$('banner').dataset.kind='net';banner('Verbindung zur Datenbank klappt gerade nicht. Ich versuche es weiter …')}
@@ -240,19 +291,36 @@ async function load(){
 function soon(){clearTimeout(reloadT);reloadT=setTimeout(load,350)}
 function done(err){inflight--;if(err){banner('Speichern hat nicht geklappt. Versuch es nochmal.')}if(inflight<=0){inflight=0;soon()}}
 
-async function bump(pid,k,delta){
+async function bump(pid,k,delta,photo){
   if(delta<0&&myCount(pid,k)<=0)return;
   localBump(pid,k,delta);inflight++;render();
   try{
     if(delta>0){
-      const r=await sb.from('entries').insert({player_id:pid,drink:k});if(r.error)throw r.error;
+      const row={player_id:pid,drink:k};if(photo)row.photo=photo;
+      const r=await sb.from('entries').insert(row);if(r.error)throw r.error;
     }else{
-      const q=await sb.from('entries').select('id').eq('player_id',pid).eq('drink',k).order('created_at',{ascending:false}).limit(1);
+      const q=await sb.from('entries').select(S.photoOK?'id,photo':'id').eq('player_id',pid).eq('drink',k).order('created_at',{ascending:false}).limit(1);
       if(q.error)throw q.error;
-      if(q.data.length){const r=await sb.from('entries').delete().eq('id',q.data[0].id);if(r.error)throw r.error}
+      if(q.data.length){const r=await sb.from('entries').delete().eq('id',q.data[0].id);if(r.error)throw r.error;if(q.data[0].photo)await sb.storage.from('fotos').remove([q.data[0].photo])}
     }
     done();
   }catch(e){done(e)}
+}
+function shrink(file){return new Promise((res,rej)=>{
+  const url=URL.createObjectURL(file),img=new Image();
+  img.onload=()=>{
+    const s=Math.min(1,1080/Math.max(img.naturalWidth,img.naturalHeight));
+    const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*s));c.height=Math.max(1,Math.round(img.naturalHeight*s));
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+    c.toBlob(b=>b?res(b):rej(new Error('Bild konnte nicht verarbeitet werden')),'image/jpeg',0.72);
+  };
+  img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('Bild konnte nicht gelesen werden'))};
+  img.src=url;
+})}
+async function delPhoto(e){
+  const r=await sb.from('entries').update({photo:null}).eq('id',e.id);
+  if(r.error){banner('Foto löschen hat nicht geklappt.');return}
+  await sb.storage.from('fotos').remove([e.photo]);soon();
 }
 async function addPlayer(name){
   name=name.trim().slice(0,20);if(!name)return;
@@ -287,6 +355,19 @@ function start(cfg){
 $('addForm').addEventListener('submit',e=>{e.preventDefault();if(!S.me)addPlayer($('nameIn').value)});
 $('confirmYes').addEventListener('click',()=>{if(S.pick){S.me=S.pick;ls('runde.me',S.me);S.pick=null;render()}});
 $('confirmNo').addEventListener('click',()=>{S.pick=null;render()});
+$('lb').addEventListener('click',()=>{$('lb').hidden=true});
+$('file').addEventListener('change',async()=>{
+  const f=$('file').files[0];$('file').value='';const k=pendingK;pendingK=null;
+  if(!f||!k||!S.me)return;
+  banner('Foto wird hochgeladen …');
+  try{
+    const blob=await shrink(f);
+    const path=S.me+'/'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.jpg';
+    const up=await sb.storage.from('fotos').upload(path,blob,{contentType:'image/jpeg',cacheControl:'31536000'});
+    if(up.error)throw up.error;
+    banner('');bump(S.me,k,1,path);
+  }catch(e){banner('Foto-Upload hat nicht geklappt ('+(e&&e.message||'Fehler')+'). Es wurde nichts eingetragen.')}
+});
 let outT=null;
 $('outBtn').addEventListener('click',()=>{
   if(!S.logout){S.logout=true;$('outBtn').textContent='Wirklich abmelden? Nochmal tippen';outT=setTimeout(()=>{S.logout=false;render()},4000);return}
