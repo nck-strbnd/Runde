@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Die Runde – Rangliste</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--bg:#14110f;--card:#1f1b18;--card2:#2a2420;--line:#3a322c;--text:#f4ede6;--mute:#a3968a;--acc:#f5a524;--acc2:#ffcf70;--bad:#ff7a6b}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:560px;margin:0 auto;padding:18px 14px 60px}
+  h1{font-size:26px;margin:4px 0 2px;letter-spacing:-.5px}
+  h1 span{color:var(--acc)}
+  .sub{color:var(--mute);font-size:14px;margin-bottom:16px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mute);margin:22px 0 8px;font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px}
+  button{font:inherit;color:inherit;border:0;cursor:pointer}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:15px}
+  .chip.on{background:var(--acc);color:#1b1206;border-color:var(--acc);font-weight:700}
+  .chip.ghost{background:transparent;border-style:dashed;color:var(--mute)}
+  .chip .x{margin-left:8px;color:var(--bad);font-weight:700}
+  .addrow{display:flex;gap:8px;margin-top:10px}
+  input{flex:1;min-width:0;width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  input:focus{outline:2px solid var(--acc);outline-offset:1px}
+  label{display:block;font-size:13px;color:var(--mute);margin:12px 0 4px}
+  .btn{background:var(--acc);color:#1b1206;border-radius:12px;padding:10px 16px;font-weight:700}
+  .btn.wide{width:100%;margin-top:14px;padding:12px}
+  .drinks{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .drink{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px}
+  .drink .top{display:flex;align-items:center;gap:10px}
+  .drink .emo{font-size:30px;line-height:1}
+  .drink .nm{font-weight:650}
+  .drink .pt{font-size:12px;color:var(--mute)}
+  .drink .ctl{display:flex;align-items:center;gap:8px}
+  .drink .cnt{flex:1;text-align:center;font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
+  .pm{width:44px;height:44px;border-radius:12px;background:var(--card2);font-size:22px;font-weight:700}
+  .pm.plus{background:var(--acc);color:#1b1206;flex:1.4;width:auto}
+  .pm:active{transform:scale(.94)}
+  .tabs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:3px;margin-bottom:10px}
+  .tab{flex:1;background:transparent;border-radius:9px;padding:8px 4px;font-size:14px;color:var(--mute)}
+  .tab.on{background:var(--card2);color:var(--text);font-weight:650}
+  .row{display:flex;align-items:center;gap:12px;padding:11px 6px;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .rank{width:30px;text-align:center;font-weight:750;color:var(--mute);font-variant-numeric:tabular-nums}
+  .row.r1 .rank{font-size:22px}
+  .who{flex:1;min-width:0}
+  .who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .who small{color:var(--mute);font-size:13px}
+  .pts{font-size:20px;font-weight:750;color:var(--acc2);font-variant-numeric:tabular-nums}
+  .pts small{font-size:11px;color:var(--mute);font-weight:500;margin-left:3px}
+  .row.me b::after{content:" · du";color:var(--acc);font-weight:500;font-size:13px}
+  .note{color:var(--mute);font-size:14px;padding:10px 6px}
+  .banner{background:#3a2a12;border:1px solid #6b4a14;color:var(--acc2);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:12px}
+  .foot{color:var(--mute);font-size:12px;margin-top:26px;text-align:center}
+  .foot button{background:none;color:var(--acc2);text-decoration:underline;padding:6px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <h1>Die <span>Runde</span></h1>
+  <div class="sub">Gemeinsame Strichliste mit Rangliste – live für alle.</div>
+  <div id="banner" class="banner" hidden></div>
+
+  <!-- Einmalige Einrichtung -->
+  <div id="setup" hidden>
+    <div class="card">
+      <b>Einmalige Einrichtung</b>
+      <div class="note" style="padding:6px 0 0">Trag hier die Daten deines Supabase-Projekts ein. Danach bekommst du einen Link, den du an alle schickst.</div>
+      <form id="setupForm">
+        <label for="cfgUrl">Project URL</label>
+        <input id="cfgUrl" placeholder="https://abcdefgh.supabase.co" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <label for="cfgKey">Publishable key</label>
+        <input id="cfgKey" placeholder="sb_publishable_…" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="btn wide" type="submit">Verbinden</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <h2>Wer trägt ein?</h2>
+    <div class="card">
+      <div id="chips" class="chips"></div>
+      <form id="addForm" class="addrow" hidden>
+        <input id="nameIn" maxlength="20" placeholder="Name" autocomplete="off">
+        <button class="btn" type="submit">Hinzufügen</button>
+      </form>
+    </div>
+
+    <div id="drinkWrap" hidden>
+      <h2 id="drinkTitle">Heute</h2>
+      <div id="drinks" class="drinks"></div>
+    </div>
+
+    <h2>Rangliste</h2>
+    <div id="tabs" class="tabs"></div>
+    <div id="board" class="card"><div class="note">Lade Daten …</div></div>
+
+    <div class="foot">
+      <button id="shareBtn" type="button">Link für Freunde kopieren</button><br>
+      Ein „Abend“ zählt bis 6 Uhr morgens zum Vortag. Trinkt mit Verstand – und kein Auto danach.
+    </div>
+  </div>
+</main>
+
+<script>
+const DRINKS=[
+  {k:'bier',n:'Bier',e:'🍺',p:1},
+  {k:'shot',n:'Shot',e:'🥃',p:1},
+  {k:'wein',n:'Wein / Sekt',e:'🍷',p:1},
+  {k:'long',n:'Longdrink',e:'🍹',p:2},
+  {k:'wasser',n:'Wasser',e:'💧',p:1}
+];
+const PERIODS=[['day','Heute'],['week','Woche'],['month','Monat'],['all','Gesamt']];
+const $=id=>document.getElementById(id);
+const S={players:[],rows:[],me:null,period:'day',loaded:false,manage:false,adding:false};
+let sb=null,inflight=0,reloadT=null;
+
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+function banner(msg){const b=$('banner');b.hidden=!msg;b.textContent=msg||''}
+
+// "Party-Tag": deutsche Zeit, bis 6 Uhr morgens zählt zum Vortag (wie in der Datenbank-Ansicht)
+const dfmt=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin'});
+function dayKey(){return dfmt.format(new Date(Date.now()-6*3600e3))}
+function weekStart(){const d=new Date(dayKey()+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10)}
+function inPeriod(day){
+  const t=dayKey();
+  if(S.period==='all')return true;
+  if(S.period==='day')return day===t;
+  if(S.period==='week')return day>=weekStart()&&day<=t;
+  return day.slice(0,7)===t.slice(0,7);
+}
+function myCount(pid,k){const r=S.rows.find(r=>r.player_id===pid&&r.day===dayKey()&&r.drink===k);return r?r.n:0}
+function localBump(pid,k,delta){
+  const day=dayKey();let r=S.rows.find(r=>r.player_id===pid&&r.day===day&&r.drink===k);
+  if(!r){r={player_id:pid,day,drink:k,n:0};S.rows.push(r)}
+  r.n=Math.max(0,r.n+delta);
+}
+
+function render(){
+  const chips=$('chips');chips.textContent='';
+  if(S.loaded&&S.me&&!S.players.some(p=>p.id===S.me))S.me=null;
+  S.players.forEach(p=>{
+    const c=el('button','chip'+(p.id===S.me?' on':''),p.name);
+    if(S.manage)c.appendChild(el('span','x','✕'));
+    c.onclick=()=>{if(S.manage){removePlayer(p.id);return}S.me=p.id;ls('runde.me',p.id);render()};
+    chips.appendChild(c);
+  });
+  const add=el('button','chip ghost','+ Person');
+  add.onclick=()=>{S.adding=!S.adding;render();if(S.adding)$('nameIn').focus()};
+  chips.appendChild(add);
+  if(S.players.length){
+    const m=el('button','chip ghost',S.manage?'Fertig':'Entfernen …');
+    m.onclick=()=>{S.manage=!S.manage;render()};chips.appendChild(m);
+  }
+  $('addForm').hidden=!S.adding;
+
+  const me=S.players.find(p=>p.id===S.me);
+  $('drinkWrap').hidden=!me;
+  if(me){
+    $('drinkTitle').textContent='Heute – '+me.name;
+    const box=$('drinks');box.textContent='';
+    DRINKS.forEach(d=>{
+      const card=el('div','drink');
+      const top=el('div','top');top.appendChild(el('div','emo',d.e));
+      const t=el('div');t.appendChild(el('div','nm',d.n));t.appendChild(el('div','pt',d.p+(d.p===1?' Punkt':' Punkte')));
+      top.appendChild(t);card.appendChild(top);
+      const ctl=el('div','ctl');
+      const minus=el('button','pm','−');minus.setAttribute('aria-label',d.n+' abziehen');minus.onclick=()=>bump(me.id,d.k,-1);
+      const plus=el('button','pm plus','+1');plus.setAttribute('aria-label',d.n+' eintragen');plus.onclick=()=>bump(me.id,d.k,1);
+      ctl.appendChild(minus);ctl.appendChild(el('div','cnt',String(myCount(me.id,d.k))));ctl.appendChild(plus);
+      card.appendChild(ctl);box.appendChild(card);
+    });
+  }
+
+  const tabs=$('tabs');tabs.textContent='';
+  PERIODS.forEach(([k,n])=>{const b=el('button','tab'+(S.period===k?' on':''),n);b.onclick=()=>{S.period=k;render()};tabs.appendChild(b)});
+
+  const board=$('board');board.textContent='';
+  if(!S.loaded){board.appendChild(el('div','note','Lade Daten …'));return}
+  if(!S.players.length){board.appendChild(el('div','note','Noch niemand dabei. Leg oben die erste Person an.'));return}
+  const tot={};S.players.forEach(p=>tot[p.id]={pts:0,c:{}});
+  const pts={};DRINKS.forEach(d=>pts[d.k]=d.p);
+  S.rows.forEach(r=>{
+    if(!tot[r.player_id]||!(r.drink in pts)||r.n<=0||!inPeriod(String(r.day)))return;
+    tot[r.player_id].c[r.drink]=(tot[r.player_id].c[r.drink]||0)+r.n;tot[r.player_id].pts+=r.n*pts[r.drink];
+  });
+  const rows=S.players.map(p=>({id:p.id,name:p.name,...tot[p.id]})).sort((a,b)=>b.pts-a.pts||a.name.localeCompare(b.name));
+  const medals=['🥇','🥈','🥉'];let rank=0,prev=null;
+  rows.forEach((r,i)=>{
+    if(r.pts!==prev){rank=i+1;prev=r.pts}
+    const row=el('div','row'+(rank===1&&r.pts>0?' r1':'')+(r.id===S.me?' me':''));
+    row.appendChild(el('div','rank',r.pts>0&&rank<=3?medals[rank-1]:String(rank)));
+    const who=el('div','who');who.appendChild(el('b',null,r.name));
+    const parts=DRINKS.filter(x=>r.c[x.k]).map(x=>x.e+' '+r.c[x.k]);
+    who.appendChild(el('small',null,parts.length?parts.join('   '):'noch nichts'));
+    row.appendChild(who);
+    const p=el('div','pts',String(r.pts));p.appendChild(el('small',null,'Pkt'));row.appendChild(p);
+    board.appendChild(row);
+  });
+}
+
+async function fetchAll(){
+  const pl=await sb.from('players').select('id,name,created_at').order('created_at');
+  if(pl.error)throw pl.error;
+  let rows=[],from=0;
+  for(;;){
+    const r=await sb.from('totals').select('player_id,day,drink,n').order('day').order('player_id').order('drink').range(from,from+999);
+    if(r.error)throw r.error;
+    rows=rows.concat(r.data);if(r.data.length<1000)break;from+=1000;
+  }
+  return {players:pl.data,rows};
+}
+async function load(){
+  if(!sb||inflight>0)return;
+  try{
+    const d=await fetchAll();
+    if(inflight>0)return; // eigene Eingabe läuft noch – gleich nochmal
+    S.players=d.players;S.rows=d.rows;S.loaded=true;
+    if($('banner').dataset.kind==='net'){banner('');$('banner').dataset.kind=''}
+    render();
+  }catch(e){$('banner').dataset.kind='net';banner('Verbindung zur Datenbank klappt gerade nicht. Ich versuche es weiter …')}
+}
+function soon(){clearTimeout(reloadT);reloadT=setTimeout(load,350)}
+function done(err){inflight--;if(err){banner('Speichern hat nicht geklappt. Versuch es nochmal.')}if(inflight<=0){inflight=0;soon()}}
+
+async function bump(pid,k,delta){
+  if(delta<0&&myCount(pid,k)<=0)return;
+  localBump(pid,k,delta);inflight++;render();
+  try{
+    if(delta>0){
+      const r=await sb.from('entries').insert({player_id:pid,drink:k});if(r.error)throw r.error;
+    }else{
+      const q=await sb.from('entries').select('id').eq('player_id',pid).eq('drink',k).order('created_at',{ascending:false}).limit(1);
+      if(q.error)throw q.error;
+      if(q.data.length){const r=await sb.from('entries').delete().eq('id',q.data[0].id);if(r.error)throw r.error}
+    }
+    done();
+  }catch(e){done(e)}
+}
+async function addPlayer(name){
+  name=name.trim().slice(0,20);if(!name)return;
+  if(S.players.some(p=>p.name.toLowerCase()===name.toLowerCase())){banner('Den Namen gibt es schon.');return}
+  banner('');
+  const r=await sb.from('players').insert({name}).select('id,name,created_at').single();
+  if(r.error){banner('Anlegen hat nicht geklappt. Versuch es nochmal.');return}
+  S.players.push(r.data);S.me=r.data.id;ls('runde.me',S.me);S.adding=false;$('nameIn').value='';render();
+}
+async function removePlayer(id){
+  const r=await sb.from('players').delete().eq('id',id);
+  if(r.error){banner('Entfernen hat nicht geklappt.');return}
+  S.players=S.players.filter(p=>p.id!==id);if(S.me===id)S.me=null;if(!S.players.length)S.manage=false;render();
+}
+
+// ---- Verbindung / Einrichtung ----
+function parseCfg(){
+  let h=decodeURIComponent(location.hash.slice(1));
+  if(!h.includes('~'))h=ls('runde.cfg')||'';
+  const i=h.indexOf('~');if(i<1)return null;
+  const ref=h.slice(0,i),key=h.slice(i+1);
+  if(!/^[a-z0-9]{8,40}$/.test(ref)||key.length<20)return null;
+  return {ref,key};
+}
+function connect(cfg){return supabase.createClient('https://'+cfg.ref+'.supabase.co',cfg.key,{auth:{persistSession:false}})}
+function start(cfg){
+  sb=connect(cfg);
+  ls('runde.cfg',cfg.ref+'~'+cfg.key);
+  if(!location.hash.includes('~'))location.hash=cfg.ref+'~'+cfg.key;
+  $('setup').hidden=true;$('app').hidden=false;
+  S.me=ls('runde.me')||null;render();load();
+  try{sb.channel('runde').on('postgres_changes',{event:'*',schema:'public',table:'entries'},soon).on('postgres_changes',{event:'*',schema:'public',table:'players'},soon).subscribe()}catch(e){}
+  setInterval(()=>{if(!document.hidden)load()},20000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
+}
+
+$('addForm').addEventListener('submit',e=>{e.preventDefault();addPlayer($('nameIn').value)});
+$('shareBtn').addEventListener('click',async()=>{
+  const b=$('shareBtn');
+  try{await navigator.clipboard.writeText(location.href);b.textContent='Link kopiert ✓'}catch(e){b.textContent='Kopier die Adresse oben aus dem Browser'}
+  setTimeout(()=>b.textContent='Link für Freunde kopieren',2500);
+});
+$('setupForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const m=$('cfgUrl').value.trim().toLowerCase().match(/([a-z0-9]{8,40})\.supabase\.co/);
+  const key=$('cfgKey').value.trim();
+  if(!m){banner('Die Project URL sieht nicht richtig aus. Sie endet auf .supabase.co');return}
+  if(key.length<20){banner('Der Key fehlt oder ist zu kurz.');return}
+  if(/^sb_secret_/.test(key)){banner('Das ist der geheime Key. Nimm den „Publishable key“ – der geheime darf nie in eine Webseite.');return}
+  banner('Prüfe Verbindung …');
+  const cfg={ref:m[1],key};
+  const t=await connect(cfg).from('totals').select('n').limit(1);
+  if(t.error){banner('Verbindung klappt nicht: '+(t.error.message||'unbekannter Fehler')+' – Stimmen URL und Key, und hast du das SQL-Skript ausgeführt?');return}
+  banner('');start(cfg);
+});
+
+if(typeof supabase==='undefined'){banner('Die App konnte nicht vollständig laden. Prüf deine Internetverbindung und lade neu.')}
+else{const cfg=parseCfg();if(cfg)start(cfg);else $('setup').hidden=false}
+</script>
+</body>
+</html>
