@@ -81,13 +81,26 @@
   </div>
 
   <div id="app" hidden>
-    <h2>Wer trägt ein?</h2>
-    <div class="card">
-      <div id="chips" class="chips"></div>
-      <form id="addForm" class="addrow" hidden>
-        <input id="nameIn" maxlength="20" placeholder="Name" autocomplete="off">
-        <button class="btn" type="submit">Hinzufügen</button>
-      </form>
+    <div id="who" hidden>
+      <h2>Wer bist du?</h2>
+      <div class="card">
+        <div id="pickArea">
+          <div id="pickHint" class="note" style="padding:0 0 8px">Schon dabei? Tipp auf deinen Namen.</div>
+          <div id="chips" class="chips"></div>
+          <label for="nameIn">Neu dabei? Trag deinen Namen ein.</label>
+          <form id="addForm" class="addrow" style="margin-top:0">
+            <input id="nameIn" maxlength="20" placeholder="Name" autocomplete="off">
+            <button class="btn" type="submit">Los</button>
+          </form>
+        </div>
+        <div id="confirm" hidden>
+          <div id="confirmTxt" style="margin-bottom:12px"></div>
+          <div class="addrow" style="margin-top:0">
+            <button id="confirmYes" class="btn" type="button" style="flex:1">Ja, das bin ich</button>
+            <button id="confirmNo" class="chip" type="button">Zurück</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="drinkWrap" hidden>
@@ -101,6 +114,7 @@
 
     <div class="foot">
       <button id="shareBtn" type="button">Link für Freunde kopieren</button><br>
+      <button id="outBtn" type="button" hidden></button><br>
       Ein „Abend“ zählt bis 6 Uhr morgens zum Vortag. Trinkt mit Verstand – und kein Auto danach.
     </div>
   </div>
@@ -116,7 +130,7 @@ const DRINKS=[
 ];
 const PERIODS=[['day','Heute'],['week','Woche'],['month','Monat'],['all','Gesamt']];
 const $=id=>document.getElementById(id);
-const S={players:[],rows:[],me:null,period:'day',loaded:false,manage:false,adding:false};
+const S={players:[],rows:[],me:null,pick:null,logout:false,period:'day',loaded:false};
 let sb=null,inflight=0,reloadT=null;
 
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
@@ -142,24 +156,22 @@ function localBump(pid,k,delta){
 }
 
 function render(){
-  const chips=$('chips');chips.textContent='';
-  if(S.loaded&&S.me&&!S.players.some(p=>p.id===S.me))S.me=null;
-  S.players.forEach(p=>{
-    const c=el('button','chip'+(p.id===S.me?' on':''),p.name);
-    if(S.manage)c.appendChild(el('span','x','✕'));
-    c.onclick=()=>{if(S.manage){removePlayer(p.id);return}S.me=p.id;ls('runde.me',p.id);render()};
-    chips.appendChild(c);
-  });
-  const add=el('button','chip ghost','+ Person');
-  add.onclick=()=>{S.adding=!S.adding;render();if(S.adding)$('nameIn').focus()};
-  chips.appendChild(add);
-  if(S.players.length){
-    const m=el('button','chip ghost',S.manage?'Fertig':'Entfernen …');
-    m.onclick=()=>{S.manage=!S.manage;render()};chips.appendChild(m);
-  }
-  $('addForm').hidden=!S.adding;
-
+  if(S.loaded&&S.me&&!S.players.some(p=>p.id===S.me)){S.me=null;ls('runde.me','')}
   const me=S.players.find(p=>p.id===S.me);
+  // Dieses Gerät gehört fest zu einer Person – Auswahl nur beim ersten Mal
+  $('who').hidden=!!me||!S.loaded;
+  if(!me&&S.loaded){
+    const pick=S.players.find(p=>p.id===S.pick);
+    $('confirm').hidden=!pick;$('pickArea').hidden=!!pick;
+    if(pick)$('confirmTxt').textContent='Du bist '+pick.name+'? Dieses Gerät trägt danach nur noch für '+pick.name+' ein.';
+    else{
+      const chips=$('chips');chips.textContent='';
+      $('pickHint').hidden=!S.players.length;chips.hidden=!S.players.length;
+      S.players.forEach(p=>{const c=el('button','chip',p.name);c.onclick=()=>{S.pick=p.id;render()};chips.appendChild(c)});
+    }
+  }
+  const out=$('outBtn');out.hidden=!me;
+  if(me&&!S.logout)out.textContent='Nicht '+me.name+'? Gerät abmelden';
   $('drinkWrap').hidden=!me;
   if(me){
     $('drinkTitle').textContent='Heute – '+me.name;
@@ -248,12 +260,7 @@ async function addPlayer(name){
   banner('');
   const r=await sb.from('players').insert({name}).select('id,name,created_at').single();
   if(r.error){banner('Anlegen hat nicht geklappt. Versuch es nochmal.');return}
-  S.players.push(r.data);S.me=r.data.id;ls('runde.me',S.me);S.adding=false;$('nameIn').value='';render();
-}
-async function removePlayer(id){
-  const r=await sb.from('players').delete().eq('id',id);
-  if(r.error){banner('Entfernen hat nicht geklappt.');return}
-  S.players=S.players.filter(p=>p.id!==id);if(S.me===id)S.me=null;if(!S.players.length)S.manage=false;render();
+  S.players.push(r.data);S.me=r.data.id;ls('runde.me',S.me);$('nameIn').value='';render();
 }
 
 // ---- Verbindung / Einrichtung ----
@@ -277,7 +284,14 @@ function start(cfg){
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
 }
 
-$('addForm').addEventListener('submit',e=>{e.preventDefault();addPlayer($('nameIn').value)});
+$('addForm').addEventListener('submit',e=>{e.preventDefault();if(!S.me)addPlayer($('nameIn').value)});
+$('confirmYes').addEventListener('click',()=>{if(S.pick){S.me=S.pick;ls('runde.me',S.me);S.pick=null;render()}});
+$('confirmNo').addEventListener('click',()=>{S.pick=null;render()});
+let outT=null;
+$('outBtn').addEventListener('click',()=>{
+  if(!S.logout){S.logout=true;$('outBtn').textContent='Wirklich abmelden? Nochmal tippen';outT=setTimeout(()=>{S.logout=false;render()},4000);return}
+  clearTimeout(outT);S.logout=false;S.me=null;S.pick=null;ls('runde.me','');render();
+});
 $('shareBtn').addEventListener('click',async()=>{
   const b=$('shareBtn');
   try{await navigator.clipboard.writeText(location.href);b.textContent='Link kopiert ✓'}catch(e){b.textContent='Kopier die Adresse oben aus dem Browser'}
